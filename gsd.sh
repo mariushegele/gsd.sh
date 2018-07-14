@@ -8,7 +8,9 @@ echo $DIR
 SITES="$GSD_SITES $BASE_SITES $(<$DIR/blacklist)"
 
 HOSTFILE="/etc/hosts"
+ALIAS=10.0.0.1
 REDIRECT_SERVER="127.0.0.1"
+PORT="6790"
 
 # expects as first argument the amount of seconds to count down
 countdown() {
@@ -20,6 +22,11 @@ countdown() {
 		now=$(date +%s)
 	done
 	echo
+}
+
+cleanup() {
+	kill -9 $(cat /tmp/gsd_app)
+	exit 1
 }
 
 if [ ! -w $HOSTFILE ]; then
@@ -36,13 +43,22 @@ then
 	working=true
 fi
 
+trap cleanup INT TERM
 # write hosts file if 'work' mode
 # on switch back to play no kill is necessary
 while [ "$working" = "true" ]
 do
+	# run server for image on localhost:port
+	node "$DIR/app.js" "$PORT" &
+	echo $!  > /tmp/gsd_app # store node pid in file to be deleted later
+
+	# set up an alias that every website redirects to but that in itself redirects to localhost:port
+	ifconfig lo0 $ALIAS alias
+	echo "rdr pass on lo0 inet proto tcp from any to $ALIAS port 80 -> $REDIRECT_SERVER port $PORT" | pfctl -ef -
+
     for SITE in $SITES; do
-	    echo "$REDIRECT_SERVER\t$SITE\t#gsd" >> $HOSTFILE
-	    echo "$REDIRECT_SERVER\twww.$SITE\t#gsd" >> $HOSTFILE
+	    echo "$ALIAS\t$SITE\t#gsd" >> $HOSTFILE
+	    echo "$ALIAS\twww.$SITE\t#gsd" >> $HOSTFILE
     done
 
 	if [ "$(uname -s)" == "Darwin" ]; then
@@ -61,7 +77,7 @@ do
 	if [ "$1" == "-t" ]
 	then
 		# second argument should be time in minutes
-		seconds=$(($2*60))
+		seconds=$((60*$2))
 		echo "Session started - Let's get to work!"
 		countdown $seconds
 
@@ -77,7 +93,7 @@ do
 		if [ "$decision" == "Break" ]
 		then
 			echo "Break started - Lean back!"
-			countdown $((5*60))
+			countdown $((5))
 			printf \\a
 			osascript -e 'tell app "System Events" to set answer to the button returned of (display dialog "Break Finsished! Go on working?" buttons {"No", "Yes"} default button 2)' | tail -n 1 > /tmp/gsd_out
 			decision2=$(cat /tmp/gsd_out)
