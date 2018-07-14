@@ -29,7 +29,7 @@ then
 
 	if [ "$(uname -s)" == "Darwin" ]; then
 		dscacheutil -flushcache
-		for BROWSER in chromium Google Chrome firefox iceweasel; do
+		for BROWSER in chromium Chrome firefox iceweasel; do
 			pkill -s TERM -f $BROWSER
 			#killall -9 $BROWSER > /dev/null 2>&1
 		done
@@ -38,4 +38,24 @@ then
 			killall $BROWSER > /dev/null 2>&1
 		done
 	fi
+fi
+
+if [ "$1" == "-t" ]
+then
+	# second argument should be time in minutes
+	seconds=$(($2*60))
+	echo "Pomodoro started - Let's get to work!"
+	now=$(date +%s)
+	end=$((now + $seconds))
+	while (( now < end )); do   
+		printf "%s\r" "$(date -u -j -f %s $((end - now)) +%T)"  
+		sleep 0.25  
+		now=$(date +%s)
+	done  
+	echo
+
+	# after countdown ring a bell and clean up the hostfile again (Mac OS X Specific)
+	sed -i -e '/#gsd$/d' $HOSTFILE
+	printf \\a
+	osascript -e 'tell app "System Events" to display dialog "Pomodoro Finished!"'
 fi
